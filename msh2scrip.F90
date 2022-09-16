@@ -4,10 +4,11 @@ program msh2scrip
 
   implicit none
 
-  integer, parameter :: grid_rank = 1    !mesh
+  integer, parameter :: grid_rank = 1    ! mesh
   integer, parameter :: nvert = 3        ! triangles
+  integer, parameter :: maxcols = 8      ! max number of columns for element list
 
-  integer :: ii,n,id,rc, ncid, dim2(2),dim1(1)
+  integer :: i,ie,n,id,rc,ncid,dim2(2),dim1(1)
   integer :: idimid,jdimid,kdimid
 
   integer, dimension(grid_rank) :: gdims
@@ -22,8 +23,8 @@ program msh2scrip
   character(len=200) :: fname
   character(len=120) :: chead
 
-  integer :: unum,nn,ne
-  integer :: nelements, nnodes
+  integer :: unum,nn,ne,ecnt
+  integer :: nelements, nnodes, nvalid
   integer :: i1,i2,i3,i4,i5,i6,node1,node2,node3
 
   real(kind=8) :: nlon, nlat, ndpt
@@ -37,12 +38,12 @@ program msh2scrip
 
   !-------------------------------------------------------------------
 
-  dirsrc = './'
+  !dirsrc = '/scratch1/NCEPDEV/nems/Denise.Worthen/WORK/WaveIn_unstr/'
   !mshfname='globa_1deg.msh'
-  mshfname='globa_1deg_no_land.msh'
+  !mshfname='globa_1deg_no_land.msh'
 
-  !dirsrc = '/scratch1/NCEPDEV/stmp2/Ali.Abdolali/Source/Aug7Dev/regtests/ww3_tp2.17/input/'  
-  !mshfname = 'inlet.msh'
+  dirsrc = '/scratch1/NCEPDEV/stmp2/Ali.Abdolali/Source/Aug7Dev/regtests/ww3_tp2.17/input/'  
+  mshfname = 'inlet.msh'
 
   dirout = './'
   fname = trim(dirsrc)//trim(mshfname)
@@ -72,19 +73,34 @@ program msh2scrip
   allocate(mask(1:nelements))
   allocate(ownedNodes(1:3,1:nelements))
   mask = 1
+  ownedNodes = -1
+  ecnt = 0
   do ne = 1,nelements
-     read(unum,*)i1,i2,i3,i4,i5,i6,node1,node2,node3
-     ownedNodes(1,ne) = node1
-     ownedNodes(2,ne) = node2
-     ownedNodes(3,ne) = node3
+     read(unum,*)i1,i2,chead
+     if (i2 /= 15) then
+        backspace(unum)
+        read(unum,*)i1,i2,i3,i4,i5,i6,node1,node2,node3
+        ecnt = ecnt+1
+        ownedNodes(1,ecnt) = node1
+        ownedNodes(2,ecnt) = node2
+        ownedNodes(3,ecnt) = node3
+        !print *,i1,i2,ecnt,node1,node2,node3
+     end if
   end do
   close(unum)
 
-  allocate(elemCornerCoordX(1:3,1:nelements))
-  allocate(elemCornerCoordY(1:3,1:nelements))
-  allocate(elemCoordX(1:nelements))
-  allocate(elemCoordY(1:nelements))
-  do ne = 1,nelements
+  nvalid = ecnt
+  print *,'number elements not on open boundary = ',nvalid
+  allocate(elemCornerCoordX(1:3,1:nvalid))
+  allocate(elemCornerCoordY(1:3,1:nvalid))
+  allocate(elemCoordX(1:nvalid))
+  allocate(elemCoordY(1:nvalid))
+  elemCornerCoordX = -999.0
+  elemCornerCoordY = -999.0
+  elemCoordX = -999.0
+  elemCoordY = -999.0
+
+  do ne = 1,nvalid
      node1 = ownedNodes(1,ne)
      node2 = ownedNodes(2,ne)
      node3 = ownedNodes(3,ne)
@@ -102,12 +118,12 @@ program msh2scrip
   end do
 
   ! arbitrary points
-  ne = nelements/2
+  ne = nvalid/2
   print *,elemCornerCoordX(1,ne),elemCornerCoordY(1,ne),elemCornerCoordX(2,ne),elemCornerCoordY(2,ne),&
        elemCornerCoordX(3,ne),elemCornerCoordY(3,ne)
   print *,elemCoordX(ne),elemCoordY(ne)
 
-  ne = nelements-15
+  ne = nvalid-15
   print *,elemCornerCoordX(1,ne),elemCornerCoordY(1,ne),elemCornerCoordX(2,ne),elemCornerCoordY(2,ne),&
        elemCornerCoordX(3,ne),elemCornerCoordY(3,ne)
   print *,elemCoordX(ne),elemCoordY(ne)
@@ -118,7 +134,7 @@ program msh2scrip
   print *,'creating '//trim(fname)
 
   rc = nf90_create(trim(fname), nf90_64bit_offset, ncid)
-  rc = nf90_def_dim(ncid, 'grid_size',  nelements, idimid)
+  rc = nf90_def_dim(ncid, 'grid_size',     nvalid, idimid)
   rc = nf90_def_dim(ncid, 'grid_corners',   nvert, jdimid)
   rc = nf90_def_dim(ncid, 'grid_rank',  grid_rank, kdimid)
 
@@ -156,17 +172,17 @@ program msh2scrip
   rc = nf90_inq_varid(ncid,  'grid_dims',        id)
   rc = nf90_put_var(ncid,             id,     gdims)
   rc = nf90_inq_varid(ncid, 'grid_imask',        id)
-  rc = nf90_put_var(ncid,             id,      mask)
+  rc = nf90_put_var(ncid,             id,      mask(1:nvalid))
 
   rc = nf90_inq_varid(ncid,  'grid_center_lon',         id)
-  rc = nf90_put_var(ncid,                   id, elemCoordX)
+  rc = nf90_put_var(ncid,                   id, elemCoordX(1:nvalid))
   rc = nf90_inq_varid(ncid,  'grid_center_lat',         id)
-  rc = nf90_put_var(ncid,                   id, elemCoordY)
+  rc = nf90_put_var(ncid,                   id, elemCoordY(1:nvalid))
 
   rc = nf90_inq_varid(ncid,  'grid_corner_lon',               id)
-  rc = nf90_put_var(ncid,                   id, elemCornerCoordX)
+  rc = nf90_put_var(ncid,                   id, elemCornerCoordX(:,1:nvalid))
   rc = nf90_inq_varid(ncid,  'grid_corner_lat',               id)
-  rc = nf90_put_var(ncid,                   id, elemCornerCoordY)
-
+  rc = nf90_put_var(ncid,                   id, elemCornerCoordY(:,1:nvalid))
   rc = nf90_close(ncid)
+
 end program msh2scrip
