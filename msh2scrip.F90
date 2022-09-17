@@ -36,14 +36,15 @@ program msh2scrip
   real(kind=8)   , allocatable :: elemCoordY(:)
   integer(kind=4), allocatable :: mask(:)
 
+  real(kind=8) :: xcnrs(3), ycnrs(3), xcen, ycen
   !-------------------------------------------------------------------
 
-  !dirsrc = '/scratch1/NCEPDEV/nems/Denise.Worthen/WORK/WaveIn_unstr/'
+  dirsrc = '/scratch1/NCEPDEV/nems/Denise.Worthen/WORK/WaveIn_unstr/'
   !mshfname='globa_1deg.msh'
-  !mshfname='globa_1deg_no_land.msh'
+  mshfname='globa_1deg_no_land.msh'
 
-  dirsrc = '/scratch1/NCEPDEV/stmp2/Ali.Abdolali/Source/Aug7Dev/regtests/ww3_tp2.17/input/'  
-  mshfname = 'inlet.msh'
+  !dirsrc = '/scratch1/NCEPDEV/stmp2/Ali.Abdolali/Source/Aug7Dev/regtests/ww3_tp2.17/input/'  
+  !mshfname = 'inlet.msh'
 
   dirout = './'
   fname = trim(dirsrc)//trim(mshfname)
@@ -61,9 +62,11 @@ program msh2scrip
   do nn = 1,nnodes
      read(unum,*)i1,nlon,nlat,ndpt
      !print *,i1,nlon,nlat,ndpt
+     !if (nlon .ge. 180.0)nlon = nlon - 360.0
      nodeCoords(1,nn) = nlon
      nodeCoords(2,nn) = nlat
   end do
+  print '(a,2f8.3)','longitude range : ',minval(nodeCoords(1,:)),maxval(nodeCoords(1,:))
 
   read(unum,*)chead
   read(unum,*)chead
@@ -112,10 +115,20 @@ program msh2scrip
      elemCornerCoordY(1,ne) = nodeCoords(2,node1)
      elemCornerCoordY(2,ne) = nodeCoords(2,node2)
      elemCornerCoordY(3,ne) = nodeCoords(2,node3)
-
-     elemCoordX(ne) = sum(elemCornerCoordX(:,ne))/3.0
-     elemCoordY(ne) = sum(elemCornerCoordY(:,ne))/3.0
   end do
+  
+  ! calculate center
+  do ne = 1,nvalid
+     do i = 1,3
+        xcnrs(i) = elemCornerCoordX(i,ne)
+        ycnrs(i) = elemCornerCoordY(i,ne)
+     end do
+     call calc_center(xcnrs,ycnrs,xcen,ycen)
+
+     elemCoordX(ne) = xcen
+     elemCoordY(ne) = ycen
+  end do
+  print '(a,2f8.2)','lon range ',minval(elemCoordX),maxval(elemCoordX)
 
   ! arbitrary points
   ne = nvalid/2
@@ -186,3 +199,36 @@ program msh2scrip
   rc = nf90_close(ncid)
 
 end program msh2scrip
+
+subroutine calc_center(xs,ys,xc,yc)
+
+  real(kind=8), dimension(3), intent(in)  :: xs,ys
+  real(kind=8)              , intent(out) :: xc,yc
+
+  !local variables
+  real(kind=8) :: xtmp(1:3)
+  real(kind=8) :: avg1, avg2, adiff
+  real(kind=8) :: diff12, diff13, diff23,maxdiff
+  logical      :: xlon
+
+  diff12 = abs(xs(1) - xs(2))
+  diff13 = abs(xs(1) - xs(3))
+  diff23 = abs(xs(2) - xs(3))
+  maxdiff = max(max(diff12,diff13),diff23)
+  xlon = .false.
+  if (maxdiff .ge. 180.0) xlon = .true.
+
+  yc = sum(ys)/3.0
+  if (.not. xlon) then
+     xc = sum(xs)/3.0
+  else
+     !print *,diff12,diff13,diff23
+     xtmp = xs
+     where(xtmp .ge. 180.0) xtmp = xtmp - 360.0
+     !print *,xtmp
+     xc = sum(xtmp)/3.0
+     !print *,xc
+     if (xc .lt. 0.0)xc = xc + 360.0
+  end if
+
+end subroutine calc_center
