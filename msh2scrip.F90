@@ -6,17 +6,13 @@ program msh2scrip
 
   integer, parameter :: grid_rank = 1    ! mesh
   integer, parameter :: nvert = 3        ! triangles
-  integer, parameter :: maxcols = 8      ! max number of columns for element list
 
   integer :: i,ie,n,id,rc,ncid,dim2(2),dim1(1)
   integer :: idimid,jdimid,kdimid
 
   integer, dimension(grid_rank) :: gdims
 
-  character(len=2)  :: vtype
   character(len=20) :: vname
-  character(len=20) :: vunit
-  character(len=20) :: vlong
 
   character(len=200) :: dirsrc, dirout
   character(len=200) :: mshfname, scpfname
@@ -62,7 +58,6 @@ program msh2scrip
   do nn = 1,nnodes
      read(unum,*)i1,nlon,nlat,ndpt
      !print *,i1,nlon,nlat,ndpt
-     !if (nlon .ge. 180.0)nlon = nlon - 360.0
      nodeCoords(1,nn) = nlon
      nodeCoords(2,nn) = nlat
   end do
@@ -91,6 +86,7 @@ program msh2scrip
      end if
   end do
   close(unum)
+  print '(a,2i8)','node range ',minval(ownedNodes),maxval(ownedNodes)
 
   nvalid = ecnt
   print *,'number elements not on open boundary = ',nvalid
@@ -207,17 +203,19 @@ subroutine calc_center(xs,ys,xc,yc)
 
   !local variables
   real(kind=8) :: xtmp(1:3)
-  real(kind=8) :: avg1, avg2, adiff
   real(kind=8) :: diff12, diff13, diff23,maxdiff
   logical      :: xlon
 
+  ! determine if nodes are discontinuous across 0E
+  ! or 180E
+  xlon = .false.
   diff12 = abs(xs(1) - xs(2))
   diff13 = abs(xs(1) - xs(3))
   diff23 = abs(xs(2) - xs(3))
   maxdiff = max(max(diff12,diff13),diff23)
-  xlon = .false.
   if (maxdiff .ge. 180.0) xlon = .true.
 
+  ! find the triangle center
   yc = sum(ys)/3.0
   if (.not. xlon) then
      xc = sum(xs)/3.0
