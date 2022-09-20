@@ -20,7 +20,7 @@ program msh2scrip
   character(len=120) :: chead
 
   integer :: unum,nn,ne,ecnt
-  integer :: nelements, nnodes, nvalid
+  integer :: nelements, nnodes, nvalid, numdupes
   integer :: i1,i2,i3,i4,i5,i6,node1,node2,node3
 
   real(kind=8) :: nlon, nlat, ndpt
@@ -31,13 +31,14 @@ program msh2scrip
   real(kind=8)   , allocatable :: elemCoordX(:)
   real(kind=8)   , allocatable :: elemCoordY(:)
   integer(kind=4), allocatable :: mask(:)
-
+  integer(kind=4), allocatable :: nodedups(:)
   real(kind=8) :: xcnrs(3), ycnrs(3), xcen, ycen
+
   !-------------------------------------------------------------------
 
   dirsrc = '/scratch1/NCEPDEV/nems/Denise.Worthen/WORK/WaveIn_unstr/'
-  !mshfname='globa_1deg.msh'
-  mshfname='globa_1deg_no_land.msh'
+  mshfname='globa_1deg.msh'
+  !mshfname='globa_1deg_no_land.msh'
 
   !dirsrc = '/scratch1/NCEPDEV/stmp2/Ali.Abdolali/Source/Aug7Dev/regtests/ww3_tp2.17/input/'  
   !mshfname = 'inlet.msh'
@@ -55,13 +56,20 @@ program msh2scrip
 
   ! read the node coords
   allocate(nodeCoords(1:2,1:nnodes))
+  allocate(nodedups(1:nnodes)) 
   do nn = 1,nnodes
      read(unum,*)i1,nlon,nlat,ndpt
-     !print *,i1,nlon,nlat,ndpt
+     !print *,'xx ',i1,nlon,nlat,ndpt
      nodeCoords(1,nn) = nlon
      nodeCoords(2,nn) = nlat
   end do
   print '(a,2f8.3)','longitude range : ',minval(nodeCoords(1,:)),maxval(nodeCoords(1,:))
+
+  call find_duplicates(nnodes,nodeCoords,nodedups,numdupes)
+  print *,'found ',numdupes,' duplicate nodes'
+  !do nn = 1,nnodes
+  !   if (nodedups(nn) .ne. -1)print *,nn,nodedups(nn)
+  !end do
 
   read(unum,*)chead
   read(unum,*)chead
@@ -79,10 +87,12 @@ program msh2scrip
         backspace(unum)
         read(unum,*)i1,i2,i3,i4,i5,i6,node1,node2,node3
         ecnt = ecnt+1
+        call setnodes(nnodes,node1,node2,node3,nodedups)
         ownedNodes(1,ecnt) = node1
         ownedNodes(2,ecnt) = node2
         ownedNodes(3,ecnt) = node3
         !print *,i1,i2,ecnt,node1,node2,node3
+        !if(ne .ge. 122000)print *,ne,ownedNodes(1,ecnt),ownedNodes(2,ecnt),ownedNodes(3,ecnt)
      end if
   end do
   close(unum)
@@ -228,5 +238,50 @@ subroutine calc_center(xs,ys,xc,yc)
      !print *,xc
      if (xc .lt. 0.0)xc = xc + 360.0
   end if
-
 end subroutine calc_center
+
+subroutine find_duplicates(nnodes,nodeCoords,nodedups,numdupes)
+
+  integer     , intent(in)  :: nnodes
+  real(kind=8), intent(in)  :: nodeCoords(2,nnodes)
+  integer     , intent(out) :: nodedups(nnodes)
+  integer     , intent(out) :: numdupes
+
+  ! local variables
+  integer :: i,ii
+  real(kind=8) :: xlon,xlat,xxlon,xxlat
+
+  nodedups(:) = -1
+  do i = 1,nnodes
+     xlon = nodeCoords(1,i)
+     xlat = nodeCoords(2,i)
+     do ii = 1,nnodes
+        if (i .ne. ii) then
+           xxlon = nodeCoords(1,ii)
+           xxlat = nodeCoords(2,ii)
+           if ((xxlon .eq. xlon .and. xxlat .eq. xlat) .or. &
+                (abs(xxlon-xlon) .eq. 360.0 .and. xxlat .eq. xlat))nodedups(i) = ii
+        end if
+     end do
+     ! remove duplicates preferentially, using lower node# as actual node
+     if (nodedups(i) .ne. -1 .and. nodedups(i) .gt. i) nodedups(i) = -1
+     !print *,'xx ',i,nodedups(i)
+  end do
+  numdupes = 0
+  do i = 1,nnodes
+     if (nodedups(i) .ne. -1)numdupes = numdupes + 1
+  end do
+     
+end subroutine find_duplicates
+
+subroutine setnodes(nnodes,n1,n2,n3,ndupes)
+
+  integer, intent(inout) :: n1, n2, n3
+  integer, intent(in)    :: nnodes
+  integer, intent(in)    :: ndupes(nnodes)
+
+  if(ndupes(n1) .ne. -1)n1 = min(n1,ndupes(n1))
+  if(ndupes(n2) .ne. -1)n2 = min(n2,ndupes(n2))
+  if(ndupes(n3) .ne. -1)n3 = min(n3,ndupes(n3))
+
+end subroutine setnodes
