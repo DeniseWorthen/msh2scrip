@@ -1,23 +1,29 @@
+!> @file msh2scrip
+!!
+!> A conversion program for WW3 msh file to SCRIP which can then be converted
+!! to ESMF Mesh format using ESMF_SCRIP2Unstruc
+!!
+!> @author Denise.Worthen@noaa.gov
+!> @date 09-20-2022
 program msh2scrip
 
   use netcdf
 
   implicit none
 
-  integer, parameter :: grid_rank = 1    ! mesh
-  integer, parameter :: nvert = 3        ! triangles
-
-  integer :: i,ie,n,id,rc,ncid,dim2(2),dim1(1)
-  integer :: idimid,jdimid,kdimid
+  integer, parameter :: grid_rank = 1    !< a mesh
+  integer, parameter :: nvert = 3        !< triangles
 
   integer, dimension(grid_rank) :: gdims
 
-  character(len=20) :: vname
-
+  character(len=20)  :: vname
   character(len=200) :: dirsrc, dirout
   character(len=200) :: mshfname, scpfname
   character(len=200) :: fname
   character(len=120) :: chead
+
+  integer :: i,ie,n,id,rc,ncid,dim2(2),dim1(1)
+  integer :: idimid,jdimid,kdimid
 
   integer :: unum,nn,ne,ecnt
   integer :: nelements, nnodes, nvalid
@@ -35,16 +41,17 @@ program msh2scrip
   real(kind=8) :: xcnrs(3), ycnrs(3), xcen, ycen
   !-------------------------------------------------------------------
 
-  dirsrc = '/scratch1/NCEPDEV/nems/Denise.Worthen/WORK/WaveIn_unstr/'
-  !mshfname='globa_1deg.msh'
-  mshfname='globa_1deg_no_land.msh'
+  dirsrc = '/scratch1/NCEPDEV/nems/Denise.Worthen/WORK/WaveIn_unstr2/'
+  mshfname='globa_1deg.msh'
+  !mshfname='globa_1deg_no_land.msh'
 
-  !dirsrc = '/scratch1/NCEPDEV/stmp2/Ali.Abdolali/Source/Aug7Dev/regtests/ww3_tp2.17/input/'  
+  !dirsrc = '/scratch1/NCEPDEV/stmp2/Ali.Abdolali/Source/Aug7Dev/regtests/ww3_tp2.17/input/'
   !mshfname = 'inlet.msh'
 
   dirout = './'
   fname = trim(dirsrc)//trim(mshfname)
   open(newunit=unum,file=trim(fname), form='formatted', status='old')
+  print *,'reading ',trim(fname)
 
   read(unum,*)chead
   read(unum,*)chead
@@ -83,6 +90,7 @@ program msh2scrip
         ownedNodes(2,ecnt) = node2
         ownedNodes(3,ecnt) = node3
         !print *,i1,i2,ecnt,node1,node2,node3
+        if(node1 .eq. 2 .or. node2 .eq. 2 .or. node3 .eq. 2)print *,ne
      end if
   end do
   close(unum)
@@ -127,7 +135,9 @@ program msh2scrip
   print '(a,2f8.2)','lon range ',minval(elemCoordX),maxval(elemCoordX)
 
   ! arbitrary points
-  ne = nvalid/2
+  !ne = nvalid/2
+  ne=2
+  print *,ownedNodes(:,ne)
   print *,elemCornerCoordX(1,ne),elemCornerCoordY(1,ne),elemCornerCoordX(2,ne),elemCornerCoordY(2,ne),&
        elemCornerCoordX(3,ne),elemCornerCoordY(3,ne)
   print *,elemCoordX(ne),elemCoordY(ne)
@@ -196,6 +206,19 @@ program msh2scrip
 
 end program msh2scrip
 
+  !===============================================================================
+  !> Finds the centroid of a triangle
+  !!
+  !> @details Finds the centroid of a triangular element, accounting for possibility
+  !! that the element crosses 0/360 or -180/180
+  !!
+  !! @param        xs        the three longitude coordinates of element (triangle)
+  !! @param        ys        the three latitude coordinates of element (triangle)
+  !! @param[out]   xc        the center longitude
+  !! @param[out]   yc        the center latitude
+  !!
+  !> @author Denise.Worthen@noaa.gov
+  !> @date 09-20-2022
 subroutine calc_center(xs,ys,xc,yc)
 
   real(kind=8), dimension(3), intent(in)  :: xs,ys
